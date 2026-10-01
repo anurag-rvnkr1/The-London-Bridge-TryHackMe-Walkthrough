@@ -1,14 +1,4 @@
-title: "TryHackMe CTF"
-description: "Professional CTF documentation."
-
+title: "The London Bridge — TryHackMe"
+description: "Portfolio-grade CTF documentation covering reconnaissance, SSRF, Linux access, privilege escalation and credential recovery."
 theme: jekyll-theme-primer
-
-plugins:
-  - jekyll-relative-links
-
-relative_links:
-  enabled: true
-  collections: true
-
-include:
-  - docs
+markdown: kramdown
