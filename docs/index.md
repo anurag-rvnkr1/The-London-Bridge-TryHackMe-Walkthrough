@@ -1,8 +1,7 @@
 ---
-title: "The London Bridge — TryHackMe | Security Assessment Walkthrough"
-description: "A portfolio-grade, independently authored walkthrough covering reconnaissance, web enumeration, SSRF, loopback filtering bypass, Linux access, privilege escalation and credential recovery."
 layout: default
-permalink: /
+title: "The London Bridge — TryHackMe"
+description: "Portfolio-grade TryHackMe CTF walkthrough covering reconnaissance, SSRF, internal enumeration, SSH access, privilege escalation, and credential recovery."
 ---
 
 # The London Bridge — TryHackMe
