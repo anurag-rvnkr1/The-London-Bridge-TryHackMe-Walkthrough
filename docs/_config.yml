@@ -1,11 +1,19 @@
 title: "The London Bridge — TryHackMe"
-description: "Portfolio-grade CTF documentation: reconnaissance, SSRF, Linux access, privilege escalation and credential recovery."
+description: "Portfolio-grade CTF documentation covering reconnaissance, web enumeration, SSRF, internal service discovery, SSH access, Linux privilege escalation, and credential recovery."
+
 theme: jekyll-theme-primer
+
 markdown: kramdown
+
 kramdown:
   input: GFM
+
 plugins:
   - jekyll-relative-links
+
 relative_links:
   enabled: true
   collections: true
+
+include:
+  - assets
