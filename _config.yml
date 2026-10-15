@@ -1,19 +1,49 @@
-title: "The London Bridge — TryHackMe"
-description: "Portfolio-grade CTF documentation covering reconnaissance, web enumeration, SSRF, internal service discovery, SSH access, Linux privilege escalation, and credential recovery."
+title: "Cybersecurity CTF Portfolio"
 
-theme: jekyll-theme-primer
+description: "Professional cybersecurity CTF, penetration testing, and security research documentation."
+
+lang: "en-US"
 
 markdown: kramdown
 
 kramdown:
   input: GFM
+  hard_wrap: false
 
-plugins:
-  - jekyll-relative-links
-
-relative_links:
-  enabled: true
-  collections: true
+# ------------------------------------------------------------
+# GitHub Pages / Jekyll
+# ------------------------------------------------------------
 
 include:
-  - assets
+  - docs
+
+# ------------------------------------------------------------
+# Default layout for all Markdown pages inside docs/
+# ------------------------------------------------------------
+
+defaults:
+  - scope:
+      path: "docs"
+    values:
+      layout: "default"
+
+# ------------------------------------------------------------
+# Sass
+# ------------------------------------------------------------
+
+sass:
+  sass_dir: assets/css
+  style: compressed
+
+# ------------------------------------------------------------
+# Exclusions
+# ------------------------------------------------------------
+
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
+  - .github
+  - .git
