@@ -1,64 +1,154 @@
----
-layout: default
-title: "The London Bridge — TryHackMe"
-description: "Portfolio-grade TryHackMe CTF walkthrough covering reconnaissance, SSRF, internal enumeration, SSH access, privilege escalation, and credential recovery."
----
+<div class="ctf-hero">
 
-# The London Bridge — TryHackMe
+  <h1>The London Bridge</h1>
 
-> **Portfolio Security Lab Write-Up** · Web Enumeration · SSRF · Linux Privilege Escalation · Credential Recovery
+  <p>
+    A TryHackMe security assessment documenting reconnaissance, web application analysis, Server-Side Request Forgery (SSRF), internal service discovery, SSH-based initial access, Linux privilege escalation, and offline browser credential recovery.
+  </p>
 
-[![TryHackMe](https://img.shields.io/badge/TryHackMe-Lab-black?logo=tryhackme)](https://tryhackme.com/)
-[![Focus](https://img.shields.io/badge/Focus-Web%20%7C%20Linux-blue)](#attack-surface)
-[![Flags](https://img.shields.io/badge/Flags-Redacted-orange)](#evidence-handling)
-[![Pages](https://img.shields.io/badge/Docs-GitHub%20Pages-222222?logo=github)](https://pages.github.com/)
+  <div class="ctf-badges">
+    <span class="ctf-badge">TryHackMe</span>
+    <span class="ctf-badge">Web Security</span>
+    <span class="ctf-badge">SSRF</span>
+    <span class="ctf-badge">Linux</span>
+    <span class="ctf-badge">Privilege Escalation</span>
+    <span class="ctf-badge">Secrets Redacted</span>
+  </div>
 
-## Executive Summary
+</div>
 
-**The London Bridge** is a TryHackMe training environment that rewards disciplined enumeration rather than a single obvious exploit. The path documented here starts with service discovery on the exposed host, moves into a web application on port `8080`, identifies a server-side fetch primitive, demonstrates **Server-Side Request Forgery (SSRF)**, bypasses a localhost restriction with an alternate loopback representation, and uses access to a local web service to uncover credentials for the `beth` account.
+## Mission and Executive Summary
 
-Once shell access is established, host enumeration points toward a kernel-level privilege-escalation opportunity. The documented lab path reaches `root`, after which the remaining objective is credential recovery for `charles` from a Firefox profile.
+**The London Bridge** is a TryHackMe training environment in which progress depends on methodical enumeration, careful validation, and following evidence across multiple attack surfaces.
 
-All flags, passwords, private-key contents, and other directly reusable secrets are **redacted** in this public portfolio edition.
+The documented investigation begins with network reconnaissance and identifies an SSH service on TCP port `22` and a Gunicorn-backed web application on TCP port `8080`. Application analysis focuses on the Gallery workflow, where request manipulation and parameter discovery reveal a server-side request capability.
 
-## Lab Scope & Ethics
+A controlled callback confirms Server-Side Request Forgery (SSRF). An alternate loopback representation then demonstrates how weak destination filtering can expose a local web service. Internal resource enumeration leads to SSH key material associated with the `beth` account.
 
-This walkthrough is intended for the **TryHackMe lab target only**. Techniques such as SSRF testing, content discovery, private-key handling, kernel exploitation and browser credential decryption should never be applied to systems without explicit authorization.
+After establishing SSH access, local host enumeration identifies a potential kernel-level privilege-escalation path associated with `CVE-2018-18955`. The documented lab chain reaches `root`, enabling inspection of a Firefox profile associated with `charles` and offline credential recovery.
 
-<div class="warning">
-<strong>Public-copy rule:</strong> secrets are intentionally omitted. The purpose of this repository is to show investigation, validation, reasoning, and defensive understanding rather than publish challenge answers.
+All challenge flags, passwords, private-key contents, and other directly reusable secrets are intentionally redacted from this public portfolio edition.
+
+## Quick Overview
+
+<div class="ctf-card-grid">
+
+  <div class="ctf-card">
+    <div class="ctf-card-title">Platform</div>
+    <div class="ctf-card-value">TryHackMe</div>
+  </div>
+
+  <div class="ctf-card">
+    <div class="ctf-card-title">Primary Focus</div>
+    <div class="ctf-card-value">Web Security / SSRF</div>
+  </div>
+
+  <div class="ctf-card">
+    <div class="ctf-card-title">Target Services</div>
+    <div class="ctf-card-value">SSH / Gunicorn HTTP</div>
+  </div>
+
+  <div class="ctf-card">
+    <div class="ctf-card-title">Initial Access</div>
+    <div class="ctf-card-value">SSH as beth</div>
+  </div>
+
+  <div class="ctf-card">
+    <div class="ctf-card-title">Privilege Escalation</div>
+    <div class="ctf-card-value">Kernel exploit research path</div>
+  </div>
+
+  <div class="ctf-card">
+    <div class="ctf-card-title">Documented Outcome</div>
+    <div class="ctf-card-value">Root access and charles credential recovery</div>
+  </div>
+
+</div>
+
+## Navigation
+
+<div class="ctf-toc">
+
+<div class="ctf-toc-title">Documentation Map</div>
+
+<ul>
+<li><a href="#mission-and-executive-summary">Mission and Executive Summary</a></li>
+<li><a href="#quick-overview">Quick Overview</a></li>
+<li><a href="#scope-and-responsible-use">Scope and Responsible Use</a></li>
+<li><a href="#attack-surface">Attack Surface</a></li>
+<li><a href="#assessment-methodology">Assessment Methodology</a></li>
+<li><a href="#reconnaissance-and-service-discovery">Reconnaissance and Service Discovery</a></li>
+<li><a href="#web-application-enumeration">Web Application Enumeration</a></li>
+<li><a href="#upload-handling-and-burp-suite-interception">Upload Handling and Burp Suite Interception</a></li>
+<li><a href="#content-discovery">Content Discovery</a></li>
+<li><a href="#request-analysis-and-fetch-primitive">Request Analysis and Fetch Primitive</a></li>
+<li><a href="#parameter-discovery-the-www-parameter">Parameter Discovery: The www Parameter</a></li>
+<li><a href="#ssrf-validation-using-a-controlled-callback">SSRF Validation Using a Controlled Callback</a></li>
+<li><a href="#loopback-filter-bypass">Loopback Filter Bypass</a></li>
+<li><a href="#internal-web-service-enumeration">Internal Web Service Enumeration</a></li>
+<li><a href="#initial-access-ssh-key-recovery-for-beth">Initial Access: SSH Key Recovery for beth</a></li>
+<li><a href="#host-enumeration-and-privilege-escalation-research">Host Enumeration and Privilege Escalation Research</a></li>
+<li><a href="#privilege-escalation-to-root">Privilege Escalation to root</a></li>
+<li><a href="#charles-credential-recovery-from-firefox">charles Credential Recovery from Firefox</a></li>
+<li><a href="#attack-chain-summary">Attack Chain Summary</a></li>
+<li><a href="#key-security-findings">Key Security Findings</a></li>
+<li><a href="#defensive-recommendations">Defensive Recommendations</a></li>
+<li><a href="#evidence-handling">Evidence Handling</a></li>
+<li><a href="#tools-used">Tools Used</a></li>
+<li><a href="#lessons-learned">Lessons Learned</a></li>
+<li><a href="#reference-and-attribution">Reference and Attribution</a></li>
+<li><a href="#portfolio-skills-demonstrated">Portfolio Skills Demonstrated</a></li>
+</ul>
+
+</div>
+
+## Scope and Responsible Use
+
+This documentation describes activity performed in the **TryHackMe training environment**. SSRF testing, content discovery, SSH key handling, kernel exploitation, and browser credential analysis must only be performed on systems for which explicit authorization has been granted.
+
+<div class="callout warning">
+
+<div class="callout-title">Public Documentation Policy</div>
+
+Challenge flags, passwords, private-key contents, and other directly reusable secrets are intentionally omitted. The objective is to demonstrate technical investigation, evidence-based reasoning, validation, and defensive understanding without publishing challenge answers.
+
 </div>
 
 ## Attack Surface
 
+The following table summarizes the services, application functionality, and host artifacts documented during the investigation.
+
 | Surface | Observation | Security significance |
 |---|---|---|
-| TCP/22 | OpenSSH 7.6p1 | Candidate remote administration interface |
-| TCP/8080 | Gunicorn-backed HTTP service | Primary web attack surface |
-| Gallery | Image viewing / upload workflow | Input-handling and server-side fetch testing point |
-| Local web service | Reachable through SSRF | Expands access to otherwise non-public resources |
-| Linux host | `beth` shell | Local enumeration becomes possible |
-| Kernel | 4.15.0-112-generic | Relevant privilege-escalation research path |
-| Firefox profile | Present in `charles` home directory | Potential source of stored application credentials |
+| TCP/22 | OpenSSH 7.6p1 Ubuntu | Candidate remote administration interface |
+| TCP/8080 | Gunicorn-backed HTTP service | Primary web application attack surface |
+| Gallery | Image viewing and upload workflow | Input handling and server-side resource retrieval |
+| Local web service | Reachable through SSRF | Potential exposure of non-public resources |
+| Linux host | SSH shell as `beth` | Enables local host enumeration |
+| Kernel | `4.15.0-112-generic` | Relevant to the documented privilege-escalation research path |
+| Firefox profile | Located in `charles`'s home directory | Potential source of stored application credentials |
 
-## Methodology
+## Assessment Methodology
 
-The investigation follows a repeatable offensive-security workflow:
+The investigation follows a structured offensive-security workflow:
 
-1. **Reconnaissance** — identify reachable services and versions.
-2. **Web enumeration** — map application functionality and hidden paths.
-3. **Input validation testing** — intercept requests and test parameter behavior.
-4. **Exploit validation** — prove SSRF using a controlled callback server.
-5. **Internal discovery** — use SSRF to reach the local web service.
-6. **Initial access** — retrieve and securely use the `beth` SSH key material.
-7. **Privilege escalation** — enumerate the host and validate the kernel path.
-8. **Credential recovery** — inspect `charles`'s Firefox profile with a suitable offline tool.
+1. **Reconnaissance:** identify exposed services and service versions.
+2. **Web enumeration:** inspect application pages and identify interesting functionality.
+3. **Request analysis:** intercept application requests and investigate resource-handling parameters.
+4. **Content discovery:** enumerate application paths and identify additional resources.
+5. **SSRF validation:** use a controlled callback to verify server-side network requests.
+6. **Internal enumeration:** investigate the local web service through the SSRF primitive.
+7. **Initial access:** recover and securely use SSH key material associated with `beth`.
+8. **Privilege escalation research:** inspect host enumeration results and evaluate the documented kernel exploit path.
+9. **Credential recovery:** inspect `charles`'s Firefox profile using an offline credential-recovery utility.
 
 ---
 
-## 1. Reconnaissance — Nmap
+## Reconnaissance and Service Discovery
 
-The first pass is a full TCP scan with default scripts and version detection.
+### Nmap service scan
+
+The initial reconnaissance uses Nmap to scan all TCP ports, run default scripts, and identify service versions.
 
 ```bash
 nmap -sC -sV -p- <TARGET>
@@ -71,134 +161,147 @@ The important results were:
 8080/tcp open  http-proxy Gunicorn
 ```
 
-Port `8080` immediately becomes the main lead because the Gunicorn-backed service exposes a browser-accessible application.
+Port `22` exposes SSH, while port `8080` hosts the Gunicorn-backed web application. The HTTP service becomes the primary investigation target because it exposes application functionality that can be examined through a browser and intercepted requests.
 
-![Nmap enumeration](assets/01-nmap-enumeration.svg)
+<figure>
+  <img src="assets/01-nmap-enumeration.svg" alt="Recreated terminal view of the initial Nmap service enumeration.">
+  <figcaption>Figure 1 — Initial service discovery identifying SSH and the Gunicorn-backed HTTP service.</figcaption>
+</figure>
 
-*Figure 1 — Recreated lab-terminal view of the initial service scan.*
+**Investigation note:** Service-version information helps prioritize further analysis but does not independently establish exploitability. Application behavior and target-specific evidence must be examined before selecting an exploitation path.
 
-### Investigation note
+## Web Application Enumeration
 
-Version strings are useful for prioritization, but they are not proof of exploitability. At this stage the correct action is to enumerate application behavior before jumping to version-specific attacks.
+### Application overview
 
----
+Browsing the service on port `8080` reveals a small web application with multiple pages, including **Gallery** and **Contact**.
 
-## 2. Web Enumeration — Port 8080
+<figure>
+  <img src="assets/02-web-home-8080.svg" alt="Recreated browser view of the web application on port 8080.">
+  <figcaption>Figure 2 — Application landing page identified during web enumeration.</figcaption>
+</figure>
 
-Browsing the service reveals a small web application with multiple pages, including **Gallery** and **Contact**.
+The Gallery workflow receives particular attention because it handles images and exposes image-viewing functionality. This provides a starting point for investigating how the server retrieves requested resources.
 
-![Web home](assets/02-web-home-8080.svg)
+<figure>
+  <img src="assets/03-gallery-page.svg" alt="Recreated Gallery page highlighting the image-viewing workflow.">
+  <figcaption>Figure 3 — Gallery functionality selected for further request and input analysis.</figcaption>
+</figure>
 
-*Figure 2 — Recreated browser view of the application on port 8080.*
+The Contact page is also reviewed, but the documented investigation identifies the Gallery workflow as the more promising lead for server-side resource handling.
 
-The Gallery functionality is more interesting because it handles images and exposes an image-viewing workflow. This creates opportunities to investigate how the server resolves the requested resource.
+<figure>
+  <img src="assets/04-contact-page.svg" alt="Recreated Contact page examined during application surface mapping.">
+  <figcaption>Figure 4 — Contact page reviewed as part of the application's exposed surface.</figcaption>
+</figure>
 
-![Gallery page](assets/03-gallery-page.svg)
+## Upload Handling and Burp Suite Interception
 
-*Figure 3 — Recreated Gallery workflow highlighting the image-viewing parameter.*
+The Gallery workflow exposes an upload function. Burp Suite is used to intercept requests so that request parameters, headers, and server responses can be examined directly rather than relying solely on browser behavior.
 
-The Contact page is also reviewed, but it does not provide the same immediate server-side file or URL handling signal.
+<figure>
+  <img src="assets/05-upload-burp-intercept.svg" alt="Recreated Burp Suite interception view for the Gallery upload request.">
+  <figcaption>Figure 5 — Upload request intercepted for direct HTTP analysis.</figcaption>
+</figure>
 
-![Contact page](assets/04-contact-page.svg)
+Several upload-bypass ideas can be considered, but the documented investigation moves toward understanding the application's resource handling and overall structure.
 
-*Figure 4 — Recreated Contact page during surface mapping.*
+The important methodological decision is to follow the strongest observable lead rather than continue testing upload variations without sufficient evidence.
 
----
+## Content Discovery
 
-## 3. Upload Handling & Burp Suite Interception
-
-The Gallery workflow exposes an upload function. Instead of relying only on browser behavior, the request is intercepted in **Burp Suite** so that headers, parameters, and server responses can be studied directly.
-
-![Burp upload interception](assets/05-upload-burp-intercept.svg)
-
-*Figure 5 — Recreated Burp interception view for the image-upload request.*
-
-Several upload-bypass ideas can be tested, but the more productive route is to step back and enumerate the application's structure and resource handling.
-
----
-
-## 4. Content Discovery
-
-A directory/content scan reveals additional application paths, including the Gallery, Contact, and upload-related resources.
+A Feroxbuster scan identifies additional application paths, including Gallery, Contact, and upload-related resources.
 
 ```bash
-feroxbuster -u http://<TARGET>:8080 \\
+feroxbuster -u http://<TARGET>:8080 \
   -w /usr/share/seclists/Discovery/Web-Content/common.txt
 ```
 
-![Feroxbuster discovery](assets/06-feroxbuster-discovery.svg)
+<figure>
+  <img src="assets/06-feroxbuster-discovery.svg" alt="Recreated Feroxbuster output showing application content-discovery results.">
+  <figcaption>Figure 6 — Content discovery used to expand the known application attack surface.</figcaption>
+</figure>
 
-*Figure 6 — Recreated content-discovery results.*
+The image-viewing behavior becomes the next focus. The application appears to accept a resource identifier and return the corresponding content, making the request parameters important candidates for further testing.
 
-The **view image** behavior deserves closer inspection. The application is effectively taking a resource identifier and returning the corresponding content.
+## Request Analysis and Fetch Primitive
 
----
+### Burp Repeater
 
-## 5. Burp Repeater — Understanding the Fetch Primitive
+The intercepted request is sent to Burp Repeater, allowing the `image_url` parameter to be modified while the server's response is observed.
 
-The intercepted request is sent to **Repeater**, where the value of the `image_url` parameter can be modified while observing the server response.
+The documented request is:
 
 ```http
 GET /view?image_url=/uploads/tower_bridge.php.png HTTP/1.1
 Host: <TARGET>:8080
 ```
 
-![Burp Repeater](assets/07-burp-repeater-image-url.svg)
+<figure>
+  <img src="assets/07-burp-repeater-image-url.svg" alt="Recreated Burp Repeater view used to analyze the image_url parameter.">
+  <figcaption>Figure 7 — Request manipulation used to investigate server-side resource retrieval.</figcaption>
+</figure>
 
-*Figure 7 — Recreated Repeater view used to test server-side resource retrieval.*
+A direct request targeting localhost is rejected, suggesting that the application applies some form of destination filtering.
 
-A direct localhost request is rejected, which suggests that the application may apply a destination filter.
+This observation changes the investigation. The next step is to determine whether another accepted parameter influences the server-side destination.
 
-That observation is valuable: **a filtered SSRF surface is still an SSRF surface** if another accepted input eventually controls the server-side destination.
+**Security principle:** A filter on one input path does not establish that the underlying server-side request capability is safe. All inputs that influence destination selection must be identified and validated.
 
----
+## Parameter Discovery: The `www` Parameter
 
-## 6. Parameter Discovery — The `www` Parameter
-
-A developer-facing hint in the application's source suggests that another request parameter may be relevant. Rather than guessing indefinitely, the request is fuzzed for alternate parameter names.
+A developer-facing hint in the application source suggests that another request parameter may be relevant. Parameter fuzzing is used to investigate alternate parameter names.
 
 ```bash
-ffuf -u "http://<TARGET>:8080/view?FUZZ=http://127.0.0.1/" \\
+ffuf -u "http://<TARGET>:8080/view?FUZZ=http://127.0.0.1/" \
      -w params.txt
 ```
 
-The meaningful discovery is a parameter named **`www`**.
+The meaningful discovery is a parameter named `www`.
 
-![Parameter fuzzing](assets/08-parameter-fuzz-www.svg)
+<figure>
+  <img src="assets/08-parameter-fuzz-www.svg" alt="Recreated FFUF results highlighting the discovered www parameter.">
+  <figcaption>Figure 8 — Parameter discovery identifies www as an additional input worth investigating.</figcaption>
+</figure>
 
-*Figure 8 — Recreated FFUF output showing `www` as the interesting parameter.*
+The discovery expands the test strategy beyond the original `image_url` handling path. The parameter's behavior is then tested to determine whether it controls server-side requests.
 
-This changes the test strategy: the application is no longer limited to the original `image_url` handling path.
+## SSRF Validation Using a Controlled Callback
 
----
+A controlled callback is used to determine whether user-controlled input causes the target server to initiate an outbound request.
 
-## 7. Proving SSRF with a Controlled Callback
-
-The next step is a controlled, non-destructive proof. A local web server is started on the testing machine:
+The testing machine starts a simple HTTP server:
 
 ```bash
 python3 -m http.server 8000 --bind 0.0.0.0
 ```
 
-The `www` parameter is then pointed at the tester's server. The callback log records an inbound `GET` request generated by the target application.
+The `www` parameter is directed to the testing server. The callback log records an inbound `GET` request generated by the target application.
 
-![SSRF callback](assets/09-ssrf-callback.svg)
+<figure>
+  <img src="assets/09-ssrf-callback.svg" alt="Recreated callback log showing an HTTP request generated by the target server.">
+  <figcaption>Figure 9 — Controlled callback evidence demonstrating server-side request behavior.</figcaption>
+</figure>
 
-*Figure 9 — Recreated callback evidence proving the server performed the outbound request.*
+<div class="key-finding">
 
-### Finding: Server-Side Request Forgery
+<div class="key-finding-title">Key Finding — SSRF</div>
 
-This establishes that user-controlled input can cause the target server to make network requests on the user's behalf. That is the defining behavior of SSRF.
+The callback demonstrates that user-controlled input can cause the target server to make an HTTP request to another destination. This is the defining behavior of Server-Side Request Forgery.
 
-**Security impact:** depending on network placement and filtering, SSRF can expose local administrative interfaces, cloud metadata services, internal APIs, or other resources that are not directly reachable from the attacker's machine.
+</div>
 
----
+### Security impact
 
-## 8. Loopback Filter Bypass
+Depending on the target's network position and destination filtering, SSRF can expose local administrative interfaces, internal APIs, cloud metadata services, or other resources that are not directly reachable from the external client.
 
-A direct `localhost` request is blocked. The next hypothesis is that the filter is matching a canonical hostname or address representation instead of safely constraining the destination.
+In this lab, the documented next step is to investigate the local web service.
 
-An alternate loopback representation is tested:
+## Loopback Filter Bypass
+
+A direct `localhost` request is blocked. The next hypothesis is that the filter relies on a canonical hostname or address representation rather than securely constraining the final destination.
+
+The following alternate loopback representation is tested in the lab:
 
 ```text
 http://127.1.:80/
@@ -206,91 +309,96 @@ http://127.1.:80/
 
 The request reaches a local web server and returns its default page.
 
-![Loopback bypass](assets/10-localhost-filter-bypass.svg)
-
-*Figure 10 — Recreated response showing successful access to the local web service.*
+<figure>
+  <img src="assets/10-localhost-filter-bypass.svg" alt="Recreated response showing successful access to the local web service using an alternate loopback representation.">
+  <figcaption>Figure 10 — Lab evidence showing that the alternate loopback representation reaches the local service.</figcaption>
+</figure>
 
 ### Why this matters
 
-SSRF defenses that rely on string comparisons can be brittle. A secure design should parse the destination as an IP/hostname, resolve it, normalize redirects, and enforce an allowlist of permitted destinations after resolution.
+Destination filters based on string comparisons can be bypassed when equivalent addresses are represented differently.
 
----
+A robust SSRF defense should parse and normalize destinations, validate resolved IP addresses, account for IPv4 and IPv6 representations, handle redirects safely, and enforce an explicit destination allowlist.
 
-## 9. Local Service Enumeration
+## Internal Web Service Enumeration
 
-Once SSRF reaches the loopback interface, the local web server becomes an attack surface in its own right. The same disciplined enumeration workflow is applied to that service.
+Successful access to the loopback interface exposes another resource-discovery opportunity. The local web service is investigated as a newly discovered attack surface rather than treating its homepage as the only available resource.
 
-The content-discovery pass is expanded to consider hidden/dot-prefixed resource syntax.
+The content-discovery approach is expanded to include hidden and dot-prefixed resource syntax.
 
-![Hidden-path discovery](assets/11-hidden-directory-fuzzing.svg)
+<figure>
+  <img src="assets/11-hidden-directory-fuzzing.svg" alt="Recreated hidden-path enumeration results showing additional internal web resources.">
+  <figcaption>Figure 11 — Internal resource enumeration through the SSRF-accessible local web service.</figcaption>
+</figure>
 
-*Figure 11 — Recreated hidden-path enumeration showing previously overlooked resources.*
+The documented investigation identifies hidden resources that contain information leading to SSH access for `beth`. The public edition does not reproduce the underlying secret contents.
 
-The important lesson is not the specific filenames; it is the **method**: when an internal service is exposed through SSRF, enumerate it like a newly discovered host rather than assuming its homepage is the only useful content.
+The key methodological lesson is that internal services exposed through SSRF should be assessed for their reachable resources and information exposure, within the authorized lab scope.
 
----
+## Initial Access: SSH Key Recovery for `beth`
 
-## 10. Recovering SSH Material for `beth`
+Two hidden resources contain information that leads to SSH access for the `beth` account. The original challenge material includes sensitive key information, which is intentionally omitted from this public version.
 
-Two hidden resources contain information that leads to SSH access for the `beth` account. The original challenge material contains secrets, so this public version deliberately omits their contents.
+<figure>
+  <img src="assets/12-beth-key-material.svg" alt="Recreated terminal view of recovered SSH key material with sensitive contents redacted.">
+  <figcaption>Figure 12 — Recovered SSH key material represented with secrets redacted.</figcaption>
+</figure>
 
-![Beth key material](assets/12-beth-key-material.svg)
-
-*Figure 12 — Recreated terminal view of the recovered key material, with secrets redacted.*
-
-The recovered private-key material is saved locally with restrictive permissions and used only against the TryHackMe target.
+The private-key material is saved locally with restrictive permissions and used only against the authorized TryHackMe target.
 
 ```bash
 chmod 600 <beth-key-file>
 ssh -i <beth-key-file> beth@<TARGET>
 ```
 
----
+The first command restricts access to the key file. The second uses that key to authenticate to the target's SSH service as `beth`.
 
-## 11. Initial Access — SSH as `beth`
+## Host Enumeration and Privilege Escalation Research
+
+### Initial shell as `beth`
 
 The SSH connection succeeds and provides an interactive shell as `beth`.
 
-![SSH as beth](assets/13-ssh-as-beth.svg)
+<figure>
+  <img src="assets/13-ssh-as-beth.svg" alt="Recreated SSH session showing successful access as beth.">
+  <figcaption>Figure 13 — Initial host access established through SSH as beth.</figcaption>
+</figure>
 
-*Figure 13 — Recreated SSH session showing the `beth` account.*
+At this point, the investigation transitions from web application testing to local host enumeration.
 
-At this point, the workflow changes from web application testing to host-based enumeration.
+The documented host-enumeration priorities include:
 
-### Host enumeration priorities
+- Current identity and group memberships.
+- Kernel version.
+- SUID/SGID binaries.
+- Writable files and directories.
+- Scheduled tasks.
+- Services and listening sockets.
+- Credential and configuration artifacts.
+- Application source code in accessible home directories.
 
-- Identity and group memberships
-- Kernel version
-- SUID/SGID binaries
-- Writable files and directories
-- Scheduled tasks
-- Services and listening sockets
-- Credentials/configuration artifacts
-- Application source code in accessible home directories
+### Kernel enumeration with linPEAS
 
----
-
-## 12. Local Privilege Escalation Enumeration
-
-`linPEAS` is used as a broad host-enumeration aid. Among the results, the kernel version is notable:
+`linPEAS` is used as a broad host-enumeration aid. The output highlights the following kernel version:
 
 ```text
 4.15.0-112-generic
 ```
 
-The enumeration output points toward **CVE-2018-18955** as a possible local privilege-escalation research path.
+The enumeration results point toward `CVE-2018-18955` as a possible local privilege-escalation research path.
 
-![linPEAS kernel enumeration](assets/14-linpeas-kernel-enumeration.svg)
+<figure>
+  <img src="assets/14-linpeas-kernel-enumeration.svg" alt="Recreated linPEAS-style host enumeration output highlighting the kernel version and privilege-escalation research path.">
+  <figcaption>Figure 14 — Host enumeration highlighting the kernel version relevant to further investigation.</figcaption>
+</figure>
 
-*Figure 14 — Recreated linPEAS-style host enumeration highlighting the kernel path.*
+Kernel version information provides a research lead, not conclusive proof of exploitability. The applicable kernel build, configuration, prerequisites, mitigations, and runtime conditions must be considered before validating a candidate exploit.
 
-The correct mindset here is validation rather than blind execution: check whether the candidate issue applies to the target kernel, understand prerequisites, and only then test the lab-specific exploit chain.
+## Privilege Escalation to `root`
 
----
+For the lab path described by the original documentation, the selected kernel exploit is compiled on the target and executed successfully.
 
-## 13. Privilege Escalation — Root
-
-For the lab path described by the source material, the selected kernel exploit is compiled on the target and executed successfully.
+The documented commands are:
 
 ```bash
 gcc exploit.c -o exploit
@@ -298,21 +406,28 @@ gcc exploit.c -o exploit
 id
 ```
 
-The resulting shell confirms UID `0` / `root`.
+The commands compile the exploit source, execute the resulting binary, and inspect the current identity. The reported result confirms UID `0`, corresponding to `root`.
 
-![Root shell](assets/15-root-shell-redacted.svg)
+<figure>
+  <img src="assets/15-root-shell-redacted.svg" alt="Recreated root-shell evidence with challenge flag information redacted.">
+  <figcaption>Figure 15 — Root-shell evidence from the documented lab path; challenge secrets are redacted.</figcaption>
+</figure>
 
-*Figure 15 — Recreated root-shell evidence. The flag itself is intentionally redacted.*
+<div class="key-finding">
+
+<div class="key-finding-title">Key Finding — Privileged Access</div>
+
+The documented lab path reaches a root shell after local host enumeration and execution of the selected kernel exploit. The associated challenge flags are not reproduced in this public portfolio edition.
+
+</div>
 
 ### Evidence handling
 
-The original root/user flags are **not reproduced** here. This repository focuses on the route to privileged access and the security concepts involved.
+The original user and root flags are intentionally omitted. The documentation preserves the technical progression and reported outcome without publishing challenge answers.
 
----
+## `charles` Credential Recovery from Firefox
 
-## 14. Recovering `charles` Credentials from Firefox
-
-With root access, the filesystem can be inspected more broadly. The home directory of `charles` contains a Firefox profile, which is a high-value artifact because browsers can store credentials locally.
+With root access, the filesystem can be inspected more broadly. The home directory associated with `charles` contains a Firefox profile, which is a high-value artifact because browsers can store authentication credentials.
 
 The profile is copied for offline analysis and passed to a Firefox credential-recovery utility such as `firefox_decrypt`.
 
@@ -320,109 +435,185 @@ The profile is copied for offline analysis and passed to a Firefox credential-re
 python3 firefox_decrypt.py <charles-firefox-profile>
 ```
 
-![Firefox credential recovery](assets/16-firefox-profile-credential-recovery.svg)
-
-*Figure 16 — Recreated Firefox credential-recovery output with the password redacted.*
+<figure>
+  <img src="assets/16-firefox-profile-credential-recovery.svg" alt="Recreated Firefox credential-recovery output with the recovered password redacted.">
+  <figcaption>Figure 16 — Offline Firefox profile analysis with sensitive credential output redacted.</figcaption>
+</figure>
 
 The recovered password is intentionally excluded from the public repository.
 
----
+This stage demonstrates the security importance of protecting browser profiles, stored credentials, and other authentication artifacts from unauthorized filesystem access.
 
-## 15. Attack Chain Summary
+## Attack Chain Summary
 
-```text
-Nmap
-  │
-  ├── 22/tcp SSH
-  └── 8080/tcp Gunicorn web app
-          │
-          ├── Gallery / upload workflow
-          │
-          ├── Burp interception
-          │
-          ├── parameter discovery → www
-          │
-          ├── SSRF proof with callback server
-          │
-          ├── loopback representation bypass
-          │
-          └── internal web-resource enumeration
-                    │
-                    └── beth SSH key material
-                              │
-                              └── SSH as beth
-                                      │
-                                      ├── linPEAS
-                                      ├── kernel enumeration
-                                      └── CVE-2018-18955 path
-                                                │
-                                                └── root
-                                                     │
-                                                     └── Firefox profile
-                                                          │
-                                                          └── charles credential recovery
-```
+The following sequence summarizes the documented progression from external reconnaissance to credential recovery.
 
-## Key Security Lessons
+<div class="attack-chain">
 
-### SSRF is primarily a trust-boundary failure
+  <div class="attack-step">Nmap Reconnaissance</div>
+  <div class="attack-arrow">→</div>
+  <div class="attack-step">Web Enumeration</div>
+  <div class="attack-arrow">→</div>
+  <div class="attack-step">Parameter Discovery</div>
+  <div class="attack-arrow">→</div>
+  <div class="attack-step">SSRF Validation</div>
+  <div class="attack-arrow">→</div>
+  <div class="attack-step">Loopback Filter Bypass</div>
+  <div class="attack-arrow">→</div>
+  <div class="attack-step">Internal Resource Enumeration</div>
+  <div class="attack-arrow">→</div>
+  <div class="attack-step">SSH as beth</div>
+  <div class="attack-arrow">→</div>
+  <div class="attack-step">Kernel Exploit Path</div>
+  <div class="attack-arrow">→</div>
+  <div class="attack-step">Root Access</div>
+  <div class="attack-arrow">→</div>
+  <div class="attack-step">Firefox Credential Recovery</div>
 
-The application treated a user-controlled value as a server-side network destination. That shifts the request's network position from the client to the server and can expose internal services.
+</div>
 
-### Blacklists are fragile
+The central progression is from a remotely accessible web application to a server-side request primitive, internal resource exposure, SSH access, local privilege escalation, and recovery of credentials from a browser profile.
 
-Blocking only `localhost` or one canonical loopback string is insufficient. Robust SSRF defenses require destination parsing, DNS/IP resolution checks, redirect controls, and explicit allowlisting.
+## Key Security Findings
 
-### Enumeration compounds
+### 1. Server-Side Request Forgery
 
-The initial service scan did not directly produce credentials. Progress came from repeatedly expanding the observable surface: application pages → parameters → internal service → hidden resources → SSH material → host artifacts.
+**Evidence:** The `www` parameter triggers an outbound HTTP request observed by a controlled callback server.
 
-### Host artifacts can be credentials
+**Security significance:** User-controlled destination selection can cause a server to access resources from its own network position, potentially exposing internal services.
 
-Private keys, shell history, browser profiles, configuration files, backup files and logs can all become authentication material. Defensive teams should protect them as secrets and remove stale credentials from systems.
+### 2. Weak loopback destination filtering
 
-### Version discovery is a starting point, not an exploit
+**Evidence:** A direct localhost request is rejected, while an alternate loopback representation reaches the local web service.
 
-A kernel version can suggest a research direction, but exploitability depends on exact build, configuration, mitigations and runtime conditions.
+**Security significance:** A destination filter based on superficial string matching may fail to recognize equivalent address representations.
 
----
+### 3. Internal resource exposure
+
+**Evidence:** SSRF access enables investigation of the local web service, and hidden resources provide information leading to SSH key material for `beth`.
+
+**Security significance:** Internal resources that are not directly exposed to external clients may become reachable through a vulnerable server-side request feature.
+
+### 4. Local privilege-escalation opportunity
+
+**Evidence:** Host enumeration identifies kernel version `4.15.0-112-generic` and points toward `CVE-2018-18955`. The documented lab path subsequently reaches root.
+
+**Security significance:** An exposed local privilege-escalation path can turn limited shell access into full system compromise when its prerequisites are met.
+
+### 5. Sensitive authentication material on disk
+
+**Evidence:** SSH key material is recovered during internal enumeration, and a Firefox profile in `charles`'s home directory is used for offline credential recovery.
+
+**Security significance:** Private keys and browser-stored credentials can extend the impact of an initial compromise when access controls do not adequately protect them.
 
 ## Defensive Recommendations
 
-| Finding | Defensive improvement |
-|---|---|
-| SSRF-capable URL parameter | Replace free-form URL fetching with a strict allowlist of approved origins |
-| Loopback bypass | Resolve and validate the final destination IP, including IPv4/IPv6 and redirects |
-| Internal resource exposure | Segment internal services and avoid exposing admin/debug endpoints to application SSRF paths |
-| Sensitive key material | Store private keys with minimal permissions and rotate any exposed credentials |
-| Browser credential exposure | Prefer enterprise password management and avoid leaving secrets in shared/browser profiles |
-| Vulnerable kernel | Patch supported kernels and maintain a regular vulnerability-management cycle |
-| Overly broad root access | Use least privilege and minimize post-exploitation blast radius |
+| Finding | Risk | Recommended security control |
+|---|---|---|
+| SSRF-capable URL parameter | Server-side requests may reach unintended destinations | Replace unrestricted URL fetching with a strict allowlist of approved destinations |
+| Loopback filter bypass | Equivalent address representations may evade simplistic filters | Parse and normalize destinations; validate resolved IP addresses; account for redirects and IPv4/IPv6 |
+| Internal resource exposure | Non-public services and hidden resources may become reachable through the application | Segment internal services and prevent application-level fetch functionality from reaching administrative or unintended internal endpoints |
+| Sensitive SSH key material | Exposed private keys can enable unauthorized authentication | Restrict key-file permissions, protect secret storage, and rotate credentials if exposure is suspected |
+| Browser credential exposure | Compromised browser profiles may reveal stored authentication material | Use managed credential storage and protect browser profiles with appropriate account and filesystem controls |
+| Kernel privilege-escalation path | A local user may obtain elevated privileges | Patch supported kernels, maintain vulnerability-management processes, and validate exploitability against the actual build |
+| Excessive privileged access | Root compromise increases the potential impact of an intrusion | Apply least privilege, minimize administrative access, and reduce the blast radius of compromised accounts |
+
+Recommendations above are tied to the documented attack path and evidence rather than unrelated security controls.
 
 ## Evidence Handling
 
-This repository uses a **redacted public-copy policy**:
+This repository follows a **redacted public-copy policy**.
 
-- User/root flags are represented as `[REDACTED]`.
+- User and root flags are omitted or represented as `[REDACTED]`.
 - Passwords and private-key contents are not published.
-- Screenshots are original recreations for this portfolio repo rather than downloaded copies of the reference article's images.
-- The third-party reference is credited below.
+- Screenshot references retain their original relative paths.
+- Screenshots are described as recreated portfolio illustrations rather than original target captures where stated in the source documentation.
+- The third-party reference is credited in the attribution section.
+- The public write-up emphasizes the investigation process, evidence, technical reasoning, and defensive lessons rather than publishing challenge secrets.
 
-## Reference & Attribution
+## Tools Used
 
-Primary reference supplied for the reconstruction:
+The following tools are documented in the original investigation.
 
-> Tommaso Greco, **“The London Bridge — TryHackMe”**, Medium, December 16, 2024.
-> https://medium.com/@tommasogreco/the-london-bridge-tryhackme-2c8f2f0e5b5a
+| Tool | Documented purpose |
+|---|---|
+| Nmap | TCP port scanning, default scripts, and service-version detection |
+| Burp Suite | HTTP request interception and request manipulation through Repeater |
+| Feroxbuster | Application content and directory discovery |
+| FFUF | Request-parameter name discovery |
+| Python HTTP server | Controlled callback endpoint for SSRF validation |
+| SSH | Remote shell access using the recovered `beth` key material |
+| linPEAS | Linux host enumeration and identification of potential privilege-escalation paths |
+| GCC | Compilation of the documented kernel exploit source on the target |
+| `firefox_decrypt` | Offline analysis of Firefox-stored credentials |
 
-This repository does **not** reproduce the article verbatim. The narrative has been independently structured for portfolio use, and secrets are omitted.
+## Lessons Learned
 
-## Portfolio Notes
+### Enumeration should follow evidence
 
-This write-up demonstrates practical skills in:
+The initial service scan did not directly reveal the credentials needed for host access. Progress came from expanding the observable attack surface in stages: application pages, request parameters, internal services, hidden resources, and host artifacts.
 
-`Nmap` · `Burp Suite` · `Feroxbuster` · `FFUF` · `SSRF analysis` · `Linux enumeration` · `linPEAS` · `SSH key handling` · `kernel exploit validation` · `browser profile analysis`
+### SSRF changes the network perspective
 
-<div class="success">
-<strong>Completion state:</strong> the documented lab path reaches <code>root</code> and recovers the <code>charles</code> credential from Firefox, with challenge secrets intentionally redacted from this public edition.
+A server-side request originates from the target application rather than the external client. This can expose internal resources that would otherwise be inaccessible from the tester's network position.
+
+### Input filtering must validate destinations
+
+A blocked hostname does not guarantee that the underlying destination is unreachable. SSRF defenses must validate the destination after appropriate parsing and resolution, including alternate address representations and redirects.
+
+### Host enumeration supports informed validation
+
+A kernel version can suggest a potential privilege-escalation research path, but the version alone is not sufficient to establish exploitability. Target-specific validation remains necessary.
+
+### Authentication artifacts require protection
+
+Private keys, configuration files, browser profiles, and stored credentials can become alternate routes to authentication. Defensive controls should protect these artifacts and support credential rotation when exposure is suspected.
+
+### Evidence handling matters
+
+A portfolio write-up should distinguish documented observations from assumptions, preserve reproducible commands and paths, and avoid exposing reusable secrets unnecessarily.
+
+## Reference and Attribution
+
+Primary reference supplied for this reconstruction:
+
+> Tommaso Greco, **“The London Bridge — TryHackMe,”** Medium, December 16, 2024.
+
+https://medium.com/@tommasogreco/the-london-bridge-tryhackme-2c8f2f0e5b5a
+
+This repository does not reproduce the reference article verbatim. The documentation is independently structured for portfolio presentation, and sensitive challenge material is intentionally omitted.
+
+## Portfolio Skills Demonstrated
+
+The documented investigation demonstrates the following security skills and workflows:
+
+<div class="tool-list">
+  <span class="tool-tag">Network Reconnaissance</span>
+  <span class="tool-tag">Nmap</span>
+  <span class="tool-tag">Web Enumeration</span>
+  <span class="tool-tag">Burp Suite</span>
+  <span class="tool-tag">Feroxbuster</span>
+  <span class="tool-tag">FFUF</span>
+  <span class="tool-tag">SSRF Analysis</span>
+  <span class="tool-tag">Internal Service Enumeration</span>
+  <span class="tool-tag">SSH Key Handling</span>
+  <span class="tool-tag">Linux Enumeration</span>
+  <span class="tool-tag">linPEAS</span>
+  <span class="tool-tag">Kernel Exploit Validation</span>
+  <span class="tool-tag">Browser Profile Analysis</span>
+  <span class="tool-tag">Credential Recovery</span>
+  <span class="tool-tag">Defensive Recommendations</span>
 </div>
+
+<div class="callout info">
+
+<div class="callout-title">Documented Completion State</div>
+
+The documented lab path reaches `root` and recovers the `charles` credential from Firefox. Challenge flags, passwords, and private-key contents remain redacted in this public portfolio edition.
+
+</div>
+
+## Responsible Use
+
+> This documentation was created for authorized cybersecurity training and CTF environments. The techniques described here should only be used against systems for which explicit permission has been granted.
+
